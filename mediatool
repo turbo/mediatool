@@ -1,0 +1,45 @@
+#!/bin/bash
+
+declare -r RED='\033[0;31m'
+declare -r CLEAR='\033[0m'
+
+set -e
+
+function mediatool::error() {
+  if [ -n "$1" ]; then
+    echo -e "${RED}ERROR: ${1}${CLEAR}\n";
+  fi
+  exit 1
+}
+
+function mediatool::check_dependencies() {
+  for p in "${@}"; do
+    hash "${p}" 2>&- || \
+      mediatool::error "Required program \"${p}\" not installed or in search PATH."
+  done
+}
+
+mediatool::check_dependencies docker grep
+
+DFLAGS=''
+
+# Only allocate tty if we detect one
+if [ -t 0 ] && [ -t 1 ]; then
+    DFLAGS="${DFLAGS} -t"
+fi
+
+# Handle userns security
+if docker info --format '{{json .SecurityOptions}}' 2>/dev/null | grep -q 'name=userns'; then
+    DFLAGS="${DFLAGS} --userns=host"
+fi
+
+ENTRYP="${1}"; shift
+
+# shellcheck disable=SC2086
+exec docker run \
+  -i ${DFLAGS} \
+  --rm \
+  -v "${HOME}":"${HOME}" \
+  -w "$(pwd)" \
+  --entrypoint "${ENTRYP}" \
+  stdfyi/mediatool:latest "$@"
